@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const Car = require('../models/car');
+const Car = require('../models/Car');
 
 // Merr të gjitha veturat
 router.get('/', async (req, res) => {
