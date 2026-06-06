@@ -157,7 +157,7 @@ function App() {
     e.target.value = '';
   };
 
-  const extractImagesFromUrl = async () => {
+  const extractCarData = async () => {
     if (!extractUrl.trim()) {
       alert('Ju lutem shkruani një URL');
       return;
@@ -165,23 +165,41 @@ function App() {
     
     setExtracting(true);
     try {
-      const response = await axios.post('https://car-dealership-api-b3mx.onrender.com/api/extract-images', {
+      const response = await axios.post('https://car-dealership-api-b3mx.onrender.com/api/extract-car-data', {
         url: extractUrl
       });
       
-      if (response.data.success && response.data.images.length > 0) {
+      if (response.data.success) {
+        if (response.data.images && response.data.images.length > 0) {
+          setNewCar(prev => ({
+            ...prev,
+            images: response.data.images
+          }));
+        }
+        
+        const data = response.data.carData;
         setNewCar(prev => ({
           ...prev,
-          images: [...(prev.images || []), ...response.data.images]
+          brand: data.brand || prev.brand,
+          model: data.model || prev.model,
+          year: data.year || prev.year,
+          price: data.price || prev.price,
+          km: data.km || prev.km,
+          fuel: data.fuel || prev.fuel,
+          transmission: data.transmission || prev.transmission,
+          engineSize: data.engineSize || prev.engineSize,
+          lokacioni: data.lokacioni || prev.lokacioni,
+          description: data.description || prev.description
         }));
-        alert(`U nxorrën ${response.data.count} foto!`);
+        
+        alert(`U nxorrën ${response.data.images.length} foto dhe të dhënat e veturës! Kontrollo dhe ndrysho nëse duhet.`);
         setExtractUrl('');
       } else {
-        alert('Nuk u gjet asnjë foto në këtë faqe');
+        alert('Nuk u gjet asnjë të dhënë në këtë faqe');
       }
     } catch (error) {
       console.error(error);
-      alert('Gabim gjatë nxjerrjes së fotove!');
+      alert('Gabim gjatë nxjerrjes së të dhënave!');
     } finally {
       setExtracting(false);
     }
@@ -384,37 +402,37 @@ function App() {
                 <option value="Manual">Manual</option>
                 <option value="Automatik">Automatik</option>
               </select>
-              <input type="text" placeholder="Madhësia e motorit" className="border p-2 rounded text-sm" value={newCar.engineSize} onChange={e => setNewCar({...newCar, engineSize: e.target.value})} />
+              <input type="text" placeholder="Madhësia e motorit (p.sh. 1.6 L)" className="border p-2 rounded text-sm" value={newCar.engineSize} onChange={e => setNewCar({...newCar, engineSize: e.target.value})} />
               <textarea placeholder="Përshkrimi" className="border p-2 rounded md:col-span-2 text-sm" rows="2" value={newCar.description} onChange={e => setNewCar({...newCar, description: e.target.value})}></textarea>
               
-              {/* Nxjerrja e fotove nga URL e jashtme */}
-              <div className="md:col-span-2">
-                <label className="font-semibold text-sm block mb-1">🔗 Nxirr foto nga URL e jashtme:</label>
+              {/* Nxjerrja e të dhënave nga URL */}
+              <div className="md:col-span-2 bg-purple-50 p-3 rounded-lg">
+                <label className="font-semibold text-sm block mb-1">🔗 Nxirr të dhënat automatikisht:</label>
                 <div className="flex gap-2">
                   <input 
                     type="text" 
-                    placeholder="Ngjit URL-në e faqes (p.sh. nga Encar, Mobile.de)" 
+                    placeholder="Ngjit URL-në e faqes (Encar, Mobile.de, Autoscout)" 
                     className="border p-2 rounded text-sm flex-1"
                     value={extractUrl}
                     onChange={(e) => setExtractUrl(e.target.value)}
                   />
                   <button 
                     type="button" 
-                    onClick={extractImagesFromUrl}
+                    onClick={extractCarData}
                     disabled={extracting}
-                    className="bg-purple-500 text-white px-4 py-2 rounded text-sm hover:bg-purple-600 transition"
+                    className="bg-purple-600 text-white px-4 py-2 rounded text-sm hover:bg-purple-700 transition"
                   >
-                    {extracting ? 'Duke nxjerrë...' : '🔍 Nxirr Foto'}
+                    {extracting ? 'Duke nxjerrë...' : '🔍 Nxirr të dhënat'}
                   </button>
                 </div>
-                <p className="text-xs text-gray-400 mt-1">
-                  Ngjit URL-në e plotë të veturës nga Encar, Mobile.de, Autoscout, etj.
+                <p className="text-xs text-gray-500 mt-1">
+                  Ngjit URL-në e plotë të veturës. Sistemi i nxjerr AUTOMATIKISHT fotot, markën, modelin, vitin, çmimin, kilometrazhin dhe specifikat.
                 </p>
               </div>
               
-              {/* Upload foto nga kompjuteri */}
+              {/* Fotot */}
               <div className="md:col-span-2">
-                <label className="font-semibold text-sm block mb-1">📸 Ose ngarko foto nga kompjuteri:</label>
+                <label className="font-semibold text-sm block mb-1">📸 Fotot:</label>
                 <div className="flex gap-2">
                   <input type="file" accept="image/*" onChange={handleImageUpload} className="border p-1 rounded text-sm flex-1" disabled={uploading} />
                 </div>
@@ -456,7 +474,7 @@ function App() {
           </form>
         )}
 
-        {/* Filtrat dhe Sortimi */}
+        {/* Filtrat */}
         <div className="bg-white p-4 rounded-lg shadow-md mb-6">
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
             <input type="text" name="brand" placeholder="Marka" className="border p-2 rounded text-sm" onChange={handleFilterChange} />
