@@ -2,7 +2,6 @@ import { useState, useEffect } from 'react';
 import axios from 'axios';
 
 const API_URL = 'https://car-dealership-api-b3mx.onrender.com/api/cars';
-//const API_URL = 'http://localhost:5001/api/cars';
 const CLOUDINARY_CLOUD_NAME = 'dleye4vxg';
 const CLOUDINARY_UPLOAD_PRESET = 'car_dealership';
 
@@ -23,6 +22,8 @@ function App() {
   const [isAdmin, setIsAdmin] = useState(false);
   const [showPasswordPrompt, setShowPasswordPrompt] = useState(false);
   const [passwordInput, setPasswordInput] = useState('');
+  const [extractUrl, setExtractUrl] = useState('');
+  const [extracting, setExtracting] = useState(false);
   const carsPerPage = 6;
   
   const [newCar, setNewCar] = useState({
@@ -154,6 +155,36 @@ function App() {
     }
     setUploading(false);
     e.target.value = '';
+  };
+
+  const extractImagesFromUrl = async () => {
+    if (!extractUrl.trim()) {
+      alert('Ju lutem shkruani një URL');
+      return;
+    }
+    
+    setExtracting(true);
+    try {
+      const response = await axios.post('https://car-dealership-api-b3mx.onrender.com/api/extract-images', {
+        url: extractUrl
+      });
+      
+      if (response.data.success && response.data.images.length > 0) {
+        setNewCar(prev => ({
+          ...prev,
+          images: [...(prev.images || []), ...response.data.images]
+        }));
+        alert(`U nxorrën ${response.data.count} foto!`);
+        setExtractUrl('');
+      } else {
+        alert('Nuk u gjet asnjë foto në këtë faqe');
+      }
+    } catch (error) {
+      console.error(error);
+      alert('Gabim gjatë nxjerrjes së fotove!');
+    } finally {
+      setExtracting(false);
+    }
   };
 
   const removeImage = (index) => {
@@ -290,7 +321,6 @@ function App() {
         <header className="flex flex-col md:flex-row justify-between items-center mb-6 gap-4">
           <h1 className="text-2xl md:text-3xl font-bold text-blue-600">🚗 AutoMarket Kosovo</h1>
           <div className="flex gap-3">
-            {/* Admin mode toggle - diskret */}
             <button 
               onClick={handleAdminToggle}
               className={`p-2 rounded-full transition ${isAdmin ? 'bg-red-500 text-white' : 'bg-gray-400 text-white hover:bg-gray-500'}`}
@@ -315,7 +345,6 @@ function App() {
           </div>
         </header>
 
-        {/* Password Prompt */}
         {showPasswordPrompt && (
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
             <div className="bg-white p-6 rounded-lg shadow-xl">
@@ -358,8 +387,34 @@ function App() {
               <input type="text" placeholder="Madhësia e motorit" className="border p-2 rounded text-sm" value={newCar.engineSize} onChange={e => setNewCar({...newCar, engineSize: e.target.value})} />
               <textarea placeholder="Përshkrimi" className="border p-2 rounded md:col-span-2 text-sm" rows="2" value={newCar.description} onChange={e => setNewCar({...newCar, description: e.target.value})}></textarea>
               
+              {/* Nxjerrja e fotove nga URL e jashtme */}
               <div className="md:col-span-2">
-                <label className="font-semibold text-sm block mb-1">📸 Fotot:</label>
+                <label className="font-semibold text-sm block mb-1">🔗 Nxirr foto nga URL e jashtme:</label>
+                <div className="flex gap-2">
+                  <input 
+                    type="text" 
+                    placeholder="Ngjit URL-në e faqes (p.sh. nga Encar, Mobile.de)" 
+                    className="border p-2 rounded text-sm flex-1"
+                    value={extractUrl}
+                    onChange={(e) => setExtractUrl(e.target.value)}
+                  />
+                  <button 
+                    type="button" 
+                    onClick={extractImagesFromUrl}
+                    disabled={extracting}
+                    className="bg-purple-500 text-white px-4 py-2 rounded text-sm hover:bg-purple-600 transition"
+                  >
+                    {extracting ? 'Duke nxjerrë...' : '🔍 Nxirr Foto'}
+                  </button>
+                </div>
+                <p className="text-xs text-gray-400 mt-1">
+                  Ngjit URL-në e plotë të veturës nga Encar, Mobile.de, Autoscout, etj.
+                </p>
+              </div>
+              
+              {/* Upload foto nga kompjuteri */}
+              <div className="md:col-span-2">
+                <label className="font-semibold text-sm block mb-1">📸 Ose ngarko foto nga kompjuteri:</label>
                 <div className="flex gap-2">
                   <input type="file" accept="image/*" onChange={handleImageUpload} className="border p-1 rounded text-sm flex-1" disabled={uploading} />
                 </div>
@@ -458,7 +513,14 @@ function App() {
               {currentCars.map(car => (
                 <div key={car._id} className="bg-white rounded-xl shadow-md overflow-hidden hover:shadow-xl transition cursor-pointer group flex flex-col h-full" onClick={() => setSelectedCar(car)}>
                   <div className="relative h-52 overflow-hidden bg-gray-200 flex-shrink-0">
-                    <img src={car.images && car.images[0] ? car.images[0] : 'https://images.unsplash.com/photo-1503376780354-7e6690d241a4?w=400&h=250&fit=crop'} alt={car.model} className="w-full h-full object-cover group-hover:scale-105 transition duration-300" />
+                    <img 
+                      src={car.images && car.images[0] ? car.images[0] : 'https://images.unsplash.com/photo-1503376780354-7e6690d241a4?w=400&h=250&fit=crop'} 
+                      alt={car.model} 
+                      className="w-full h-full object-cover group-hover:scale-105 transition duration-300" 
+                      onError={(e) => {
+                        e.target.src = 'https://images.unsplash.com/photo-1503376780354-7e6690d241a4?w=400&h=250&fit=crop';
+                      }}
+                    />
                     {car.isDoganuar && <span className="absolute top-2 left-2 bg-green-500 text-white text-xs px-2 py-0.5 rounded-full">✓ Doganuar</span>}
                     {car.transportNePort && <span className="absolute top-2 right-2 bg-blue-500 text-white text-xs px-2 py-0.5 rounded-full">🚢 Port Durrës</span>}
                     <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/70 to-transparent p-2">
