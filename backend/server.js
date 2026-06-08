@@ -47,48 +47,83 @@ app.post('/api/extract-car-data', async (req, res) => {
   try {
     const { data } = await axios.get(url, {
       headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+        'Accept-Language': 'ko-KR,ko;q=0.9,en;q=0.8'
       },
       timeout: 15000
     });
     
     const $ = cheerio.load(data);
     
-    // --- 1. Nxirr fotot unike dhe të vlefshme ---
-    const imagesSet = new Set();
+    // --- 1. Nxirr fotot cilësore ---
+    const imagesMap = new Map();
     
-    // Open Graph image
+    function getImageSize(imgUrl) {
+      if (!imgUrl) return 0;
+      // Encar format: ?d=1080x608
+      if (imgUrl.includes('d=1080x608') || imgUrl.includes('width=1080') || imgUrl.includes('size=large') || imgUrl.match(/\/origin\//)) {
+        return 1080;
+      }
+      if (imgUrl.includes('d=720x480') || imgUrl.includes('width=720')) {
+        return 720;
+      }
+      if (imgUrl.includes('d=300x200') || imgUrl.includes('thumb') || imgUrl.includes('thumbnail')) {
+        return 300;
+      }
+      return 0;
+    }
+    
+    function getBaseImageUrl(imgUrl) {
+      // Heq parametrat e madhësisë për të krahasuar URL-të bazë
+      return imgUrl.replace(/\?d=[0-9]+x[0-9]+/, '').replace(/_[0-9]+x[0-9]+\./, '.');
+    }
+    
+    // Open Graph image (foto kryesore)
     $('meta[property="og:image"]').each((i, el) => {
       let img = $(el).attr('content');
-      if (img && img.startsWith('http') && 
-          !img.includes('placeholder') && 
-          !img.includes('blank') &&
-          !img.includes('no-image') &&
-          !img.match(/logo|icon|banner|thumb/i)) {
-        imagesSet.add(img);
+      if (img) {
+        if (img.startsWith('//')) img = 'https:' + img;
+        if (img.startsWith('http://')) img = img.replace('http://', 'https://');
+        if (img.match(/\.(jpg|jpeg|png|webp)/i) && !img.includes('placeholder') && !img.includes('blank')) {
+          const baseUrl = getBaseImageUrl(img);
+          if (!imagesMap.has(baseUrl) || imagesMap.get(baseUrl) < 1080) {
+            imagesMap.set(baseUrl, 1080);
+          }
+        }
       }
     });
     
     // Të gjitha imazhet
     $('img').each((i, el) => {
-      let img = $(el).attr('src') || $(el).attr('data-src') || $(el).attr('data-lazy-src');
-      if (img) {
-        if (img.startsWith('//')) img = 'https:' + img;
-        else if (img.startsWith('/')) img = new URL(img, url).href;
-        
-        if (img && img.match(/\.(jpg|jpeg|png|webp)/i) && 
-            img.startsWith('http') &&
-            !img.includes('placeholder') &&
-            !img.includes('blank') &&
-            !img.includes('icon') &&
-            !img.includes('logo') &&
-            img.length > 30) {
-          imagesSet.add(img);
-        }
+      let img = $(el).attr('src') || $(el).attr('data-src') || $(el).attr('data-lazy-src') || $(el).attr('data-original');
+      if (!img) return;
+      
+      // Konverto URL relative në absolute
+      if (img.startsWith('//')) img = 'https:' + img;
+      else if (img.startsWith('/')) img = new URL(img, url).href;
+      if (img.startsWith('http://')) img = img.replace('http://', 'https://');
+      
+      // Filtro foto të pavlefshme
+      if (img.includes('placeholder') || img.includes('blank') || img.includes('no-image')) return;
+      if (img.includes('icon') || img.includes('logo') || img.includes('button') || img.includes('banner')) return;
+      if (!img.match(/\.(jpg|jpeg|png|webp)/i)) return;
+      
+      const size = getImageSize(img);
+      const baseUrl = getBaseImageUrl(img);
+      
+      if (!imagesMap.has(baseUrl) || imagesMap.get(baseUrl) < size) {
+        imagesMap.set(baseUrl, size);
       }
     });
     
-    const uniqueImages = Array.from(imagesSet).slice(0, 15);
+    // Filtro dhe rendit fotot (vetëm ato >= 720px ose që duken si foto të mëdha)
+    const uniqueImages = Array.from(imagesMap.entries())
+      .filter(([url, size]) => size >= 720 || url.includes('origin') || url.includes('large') || url.includes('1080'))
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 10)
+      .map(([url]) => url);
+    
+    console.log(`📸 Nxjerrë: ${uniqueImages.length} foto cilësore`);
     
     // --- 2. Nxirr titullin ---
     let title = '';
@@ -110,6 +145,12 @@ app.post('/api/extract-car-data', async (req, res) => {
       }
     }
     
+    // Për Encar, ndonjëherë marka është në URL ose në elementë të tjerë
+    if (!brand && url.includes('encar')) {
+      const urlBrand = url.match(/\/([a-zA-Z]+)-\d+/);
+      if (urlBrand) brand = urlBrand[1];
+    }
+    
     // --- 4. Nxirr vitin ---
     let year = '';
     const yearRegex = /\b(19[0-9]{2}|20[0-9]{2})\b/g;
@@ -121,15 +162,15 @@ app.post('/api/extract-car-data', async (req, res) => {
     
     // --- 5. Nxirr çmimin ---
     let price = '';
-    const priceRegex = /(?:€|EUR|Euro)\s*([0-9.,]+)|([0-9.,]+)\s*(?:€|EUR|Euro)/i;
+    const priceRegex = /(?:€|EUR|Euro)\s*([0-9.,]+)|([0-9.,]+)\s*(?:€|EUR|Euro)|([0-9.,]+)\s*€/i;
     const priceMatch = bodyText.match(priceRegex);
     if (priceMatch) {
-      price = (priceMatch[1] || priceMatch[2]).replace(/[.,]/g, '');
+      price = (priceMatch[1] || priceMatch[2] || priceMatch[3]).replace(/[.,]/g, '');
     }
     
     // --- 6. Nxirr kilometrazhin ---
     let km = '';
-    const kmRegex = /([0-9.,]+)\s*(?:km|kilometer|kilometra)/i;
+    const kmRegex = /([0-9.,]+)\s*(?:km|kilometer|kilometra|km)/i;
     const kmMatch = bodyText.match(kmRegex);
     if (kmMatch) {
       km = kmMatch[1].replace(/[.,]/g, '');
@@ -137,7 +178,7 @@ app.post('/api/extract-car-data', async (req, res) => {
     
     // --- 7. Nxirr karburantin ---
     let fuel = 'Benzine';
-    const fuels = ['Benzine', 'Diesel', 'Elektrike', 'Hibrid', 'GPL', 'Metan'];
+    const fuels = ['Benzine', 'Diesel', 'Elektrike', 'Hibrid', 'GPL', 'Metan', 'Electric', 'Hybrid'];
     for (const f of fuels) {
       if (bodyText.toLowerCase().includes(f.toLowerCase())) {
         fuel = f;
@@ -147,21 +188,21 @@ app.post('/api/extract-car-data', async (req, res) => {
     
     // --- 8. Nxirr transmetimin ---
     let transmission = 'Manual';
-    if (bodyText.toLowerCase().includes('automatik') || bodyText.toLowerCase().includes('automatic')) {
+    if (bodyText.toLowerCase().includes('automatik') || bodyText.toLowerCase().includes('automatic') || bodyText.toLowerCase().includes('auto')) {
       transmission = 'Automatik';
     }
     
     // --- 9. Nxirr madhësinë e motorit ---
     let engineSize = '';
-    const engineRegex = /([0-9]+(?:[.,][0-9]+)?)\s*(?:l|liter|litra)/i;
+    const engineRegex = /([0-9]+(?:[.,][0-9]+)?)\s*(?:l|liter|litra|L)/i;
     const engineMatch = bodyText.match(engineRegex);
     if (engineMatch) {
       let size = engineMatch[1].replace('.', ',');
-      engineSize = size + ' L';
+      engineSize = size;
     }
     
     // --- 10. Nxirr lokacionin ---
-    let lokacioni = 'Tiranë';
+    let lokacioni = 'Durrës';
     const locations = ['Tiranë', 'Durrës', 'Prishtinë', 'Prizren', 'Pejë', 'Mitrovicë', 'Gjakovë', 'Ferizaj', 'Gjilan', 'Fushë Kosovë', 'Shkodër', 'Vlorë'];
     for (const loc of locations) {
       if (bodyText.toLowerCase().includes(loc.toLowerCase())) {
