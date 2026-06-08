@@ -11,7 +11,7 @@ function App() {
   const [loading, setLoading] = useState(true);
   const [filters, setFilters] = useState({ 
     brand: '', year: '', minPrice: 0, maxPrice: 100000, 
-    minKm: 0, maxKm: 500000, fuel: '', transmission: '' 
+    minKm: 0, maxKm: 500000, fuel: '', transmission: '', engineSize: ''
   });
   const [sortBy, setSortBy] = useState('newest');
   const [currentPage, setCurrentPage] = useState(1);
@@ -66,6 +66,9 @@ function App() {
     }
     if (filters.transmission) {
       result = result.filter(car => car.transmission === filters.transmission);
+    }
+    if (filters.engineSize) {
+      result = result.filter(car => car.engineSize === filters.engineSize);
     }
     result = result.filter(car => car.price >= filters.minPrice && car.price <= filters.maxPrice);
     result = result.filter(car => car.km >= filters.minKm && car.km <= filters.maxKm);
@@ -402,7 +405,7 @@ function App() {
                 <option value="Manual">Manual</option>
                 <option value="Automatik">Automatik</option>
               </select>
-              <input type="text" placeholder="Madhësia e motorit (p.sh. 1.6 L)" className="border p-2 rounded text-sm" value={newCar.engineSize} onChange={e => setNewCar({...newCar, engineSize: e.target.value})} />
+              <input type="text" placeholder="Madhësia e motorit (p.sh. 1.6 L, 2.0 L)" className="border p-2 rounded text-sm" value={newCar.engineSize} onChange={e => setNewCar({...newCar, engineSize: e.target.value})} />
               <textarea placeholder="Përshkrimi" className="border p-2 rounded md:col-span-2 text-sm" rows="2" value={newCar.description} onChange={e => setNewCar({...newCar, description: e.target.value})}></textarea>
               
               {/* Nxjerrja e të dhënave nga URL */}
@@ -474,9 +477,9 @@ function App() {
           </form>
         )}
 
-        {/* Filtrat */}
+        {/* Filtrat e Kërkimit */}
         <div className="bg-white p-4 rounded-lg shadow-md mb-6">
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3 mb-4">
             <input type="text" name="brand" placeholder="Marka" className="border p-2 rounded text-sm" onChange={handleFilterChange} />
             <input type="number" name="year" placeholder="Viti" className="border p-2 rounded text-sm" onChange={handleFilterChange} />
             <select name="fuel" className="border p-2 rounded text-sm" onChange={handleFilterChange}>
@@ -484,6 +487,23 @@ function App() {
               <option value="Benzine">Benzine</option>
               <option value="Diesel">Diesel</option>
               <option value="Elektrike">Elektrike</option>
+            </select>
+            <select name="engineSize" className="border p-2 rounded text-sm" onChange={handleFilterChange}>
+              <option value="">Madhësia e motorit</option>
+              <option value="1.0 L">1.0 L</option>
+              <option value="1.2 L">1.2 L</option>
+              <option value="1.3 L">1.3 L</option>
+              <option value="1.4 L">1.4 L</option>
+              <option value="1.5 L">1.5 L</option>
+              <option value="1.6 L">1.6 L</option>
+              <option value="1.7 L">1.7 L</option>
+              <option value="1.8 L">1.8 L</option>
+              <option value="1.9 L">1.9 L</option>
+              <option value="2.0 L">2.0 L</option>
+              <option value="2.2 L">2.2 L</option>
+              <option value="2.4 L">2.4 L</option>
+              <option value="2.5 L">2.5 L</option>
+              <option value="3.0 L">3.0 L</option>
             </select>
             <select name="transmission" className="border p-2 rounded text-sm" onChange={handleFilterChange}>
               <option value="">Transmetimi</option>

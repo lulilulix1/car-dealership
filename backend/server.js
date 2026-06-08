@@ -36,7 +36,7 @@ app.use(cors({
 
 app.use(express.json());
 
-// Endpoint për nxjerrjen e të dhënave nga URL e jashtme
+// Endpoint për nxjerrjen e të dhënave nga URL e jashtme (i përmirësuar)
 app.post('/api/extract-car-data', async (req, res) => {
   const { url } = req.body;
   
@@ -54,24 +54,45 @@ app.post('/api/extract-car-data', async (req, res) => {
     
     const $ = cheerio.load(data);
     
-    // --- 1. Nxirr fotot ---
+    // --- 1. Nxirr fotot (të filtruara) ---
     const images = new Set();
     
+    // Kërko për Open Graph image (zakonisht foto kryesore)
     $('meta[property="og:image"]').each((i, el) => {
-      const img = $(el).attr('content');
-      if (img && img.startsWith('http')) images.add(img);
+      let img = $(el).attr('content');
+      if (img && img.startsWith('http') && !img.includes('placeholder') && !img.includes('blank')) {
+        // Konverto në foto të madhe nëse është thumbnail
+        img = img.replace(/thumbnail|thumb|small|mini/gi, 'large');
+        images.add(img);
+      }
     });
     
+    // Kërko për të gjitha imazhet e mëdha
     $('img').each((i, el) => {
-      let img = $(el).attr('src') || $(el).attr('data-src') || $(el).attr('data-lazy-src');
+      let img = $(el).attr('src') || $(el).attr('data-src') || $(el).attr('data-lazy-src') || $(el).attr('data-original');
       if (img) {
+        // Konverto URL relative në absolute
         if (img.startsWith('//')) img = 'https:' + img;
         else if (img.startsWith('/')) img = new URL(img, url).href;
-        if (img && img.match(/\.(jpg|jpeg|png|webp|gif)/i) && img.startsWith('http')) {
+        
+        // Filtro vetëm foto të vlefshme
+        if (img && img.match(/\.(jpg|jpeg|png|webp)/i) && 
+            img.startsWith('http') &&
+            !img.includes('placeholder') &&
+            !img.includes('blank') &&
+            !img.includes('thumbnail') &&
+            !img.includes('icon') &&
+            !img.includes('logo')) {
+          
+          // Konverto në foto të madhe
+          img = img.replace(/thumbnail|thumb|small|mini|w_100|w_200|h_100|h_200/gi, '');
           images.add(img);
         }
       }
     });
+    
+    // Filtro foto të dyfishta dhe merr maksimumi 15 foto
+    const uniqueImages = Array.from(images).slice(0, 15);
     
     // --- 2. Nxirr titullin ---
     let title = '';
@@ -136,10 +157,11 @@ app.post('/api/extract-car-data', async (req, res) => {
     
     // --- 9. Nxirr madhësinë e motorit ---
     let engineSize = '';
-    const engineRegex = /([0-9]+(?:[.,][0-9]+)?)\s*(?:l|liter|litra)/i;
+    const engineRegex = /([0-9]+(?:[.,][0-9]+)?)\s*(?:l|liter|litra|L)/i;
     const engineMatch = bodyText.match(engineRegex);
     if (engineMatch) {
-      engineSize = engineMatch[1].replace('.', ',') + ' L';
+      let size = engineMatch[1].replace('.', ',');
+      engineSize = size + ' L';
     }
     
     // --- 10. Nxirr lokacionin ---
@@ -154,7 +176,7 @@ app.post('/api/extract-car-data', async (req, res) => {
     
     res.json({
       success: true,
-      images: Array.from(images).slice(0, 20),
+      images: uniqueImages,
       carData: {
         brand: brand,
         model: model,
